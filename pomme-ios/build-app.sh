@@ -1,3 +1,4 @@
+
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -23,8 +24,7 @@ unset SDKROOT LIBRARY_PATH
 
 cd "$PROJECT_DIR/.."
 
-# Keep shaderc from treating the MoltenVK staging directory
-# as a complete Vulkan SDK.
+# Prevent shaderc from treating MoltenVK as a full Vulkan SDK.
 if [ -n "${VULKAN_SDK:-}" ] && [ -d "${VULKAN_SDK}/lib" ]; then
     export SHADERC_LIB_DIR="${VULKAN_SDK}/lib"
 else
@@ -33,8 +33,16 @@ else
     export SHADERC_LIB_DIR
 fi
 
-# Stage MoltenVK separately, then expose it for the app's Vulkan linking.
-MOLTENVK_SDK="$(python3 tools/fetch_moltenvk.py "$platform")"
+# Download and stage MoltenVK.
+# Keep only the final directory path, not download messages.
+MOLTENVK_SDK="$(python3 tools/fetch_moltenvk.py "$platform" | tail -n 1)"
+
+# Verify the Vulkan library before linking.
+if [ ! -f "$MOLTENVK_SDK/lib/libvulkan.a" ]; then
+    echo "error: MoltenVK library not found: $MOLTENVK_SDK/lib/libvulkan.a" >&2
+    exit 1
+fi
+
 export VULKAN_SDK="$MOLTENVK_SDK"
 
 cargo build -p pomme-ios --target "$triple" ${release:+"$release"}
