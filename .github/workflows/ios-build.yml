@@ -11,19 +11,32 @@ jobs:
     runs-on: macos-15
 
     steps:
-      - name: Checkout
+      - name: Checkout repository and submodules
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Install tools
+      # Must match the repository's rust-toolchain.toml
+      - name: Install pinned Rust toolchain and iOS target
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-08-21
+          targets: aarch64-apple-ios
+          components: rust-src, clippy, rustfmt, rust-analyzer
+
+      - name: Verify Rust toolchain and target
+        run: |
+          rustc --version
+          cargo --version
+          rustup target list --installed
+          rustup target list --toolchain nightly-2026-08-21 --installed | grep -Fx aarch64-apple-ios
+
+      - name: Cache Rust dependencies and build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install native build tools
         run: |
           brew install xcodegen cmake
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-ios
 
       - name: Generate Xcode project
         run: |
@@ -44,11 +57,14 @@ jobs:
 
       - name: Package unsigned IPA
         run: |
+          set -euo pipefail
+          test -d target/ios-build/Build/Products/Release-iphoneos/Pomme.app
           mkdir -p Payload
           cp -R target/ios-build/Build/Products/Release-iphoneos/Pomme.app Payload/
-          zip -r Pomme-unsigned.ipa Payload
+          /usr/bin/zip -qry Pomme-unsigned.ipa Payload
+          test -s Pomme-unsigned.ipa
 
-      - name: Upload IPA
+      - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
           name: Pomme-iOS-Unsigned
