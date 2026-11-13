@@ -10,25 +10,46 @@ permissions:
 jobs:
   build:
     runs-on: macos-15
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install tools
         run: |
-          brew install xcodegen cmake just
+          brew install xcodegen cmake
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-ios
 
-      - name: Build iOS archive
+      - name: Generate Xcode project
         run: |
-          python3 tools/ios.py archive
+          cd pomme-ios
+          xcodegen generate
+
+      - name: Build unsigned iOS app
+        run: |
+          xcodebuild \
+            -project pomme-ios/Pomme.xcodeproj \
+            -scheme Pomme \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath target/ios-build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p Payload
+          cp -R target/ios-build/Build/Products/Release-iphoneos/Pomme.app Payload/
+          zip -r Pomme-unsigned.ipa Payload
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: Pomme-iOS
-          path: target/ios-build/export/*.ipa
+          name: Pomme-iOS-Unsigned
+          path: Pomme-unsigned.ipa
+          if-no-files-found: error
